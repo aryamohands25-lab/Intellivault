@@ -1,0 +1,32 @@
+# Environment secrets
+.env
+.streamlit/secrets.toml
+
+# Python cache and virtual environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local databases and uploaded documents
+chroma_db/
+data/
+
+# Backup files
+app_backup.py
+database.backup.py
+evaluate_backup.py
+
+# Local evaluation outputs and test data
+results.csv
+results.jsonl
+results_summary.md
+questions.json
+
+# Test scripts
+test.ui.py
+test_auth.py
+test_db.py
+
+# Local editor settings
+.vscode/
