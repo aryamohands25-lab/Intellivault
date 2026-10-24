@@ -1,4 +1,5 @@
-
+import streamlit as st
+from dotenv import dotenv_values
 from pathlib import Path
 from datetime import datetime, timezone
 from urllib.parse import quote_plus
@@ -19,12 +20,19 @@ from argon2 import PasswordHasher, exceptions as argon2_exceptions
 ENV_PATH = Path(__file__).resolve().parent / ".env"
 config = dotenv_values(str(ENV_PATH), encoding="utf-8-sig")
 
-username = config.get("MONGODB_USERNAME")
-password = config.get("MONGODB_PASSWORD")
+# Read credentials from Streamlit Cloud Secrets first,
+# then fall back to the local .env file.
+try:
+    username = st.secrets.get("MONGODB_USERNAME") or config.get("MONGODB_USERNAME")
+    password = st.secrets.get("MONGODB_PASSWORD") or config.get("MONGODB_PASSWORD")
+except Exception:
+    username = config.get("MONGODB_USERNAME")
+    password = config.get("MONGODB_PASSWORD")
 
 if not username or not password:
     raise ValueError(
-        "Check MONGODB_USERNAME and MONGODB_PASSWORD in your .env file."
+        "MongoDB credentials are missing. Configure MONGODB_USERNAME "
+        "and MONGODB_PASSWORD in Streamlit Secrets or your local .env file."
     )
 
 uri = (
