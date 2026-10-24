@@ -1,44 +1,97 @@
-"""Phase 2: baseline single-step RAG (dense retrieval -> LLM).
 
-This is the system your agentic version will be compared against,
-so keep it simple and don't "improve" it later.
+"""
+Phase 2: baseline single-step RAG (dense retrieval -> LLM).
 
 Usage:
     python baseline_rag.py "What is Reciprocal Rank Fusion?"
     python baseline_rag.py            # interactive mode
 """
-import sys
 
 import os
+import sys
 
-from config import (GEMINI_MODEL, LLM_MODEL, LLM_PROVIDER, MIN_SIMILARITY, OLLAMA_MODEL,
-                    OLLAMA_URL, QUERY_PREFIX, TOP_K, get_collection, get_embedder)
+from config import (
+    GEMINI_MODEL,
+    LLM_MODEL,
+    LLM_PROVIDER,
+    MIN_SIMILARITY,
+    OLLAMA_MODEL,
+    OLLAMA_URL,
+    QUERY_PREFIX,
+    TOP_K,
+    get_collection,
+    get_embedder,
+)
 
 SYSTEM_PROMPT = (
     "You answer questions using ONLY the numbered context passages provided. "
-    "Write a short answer in your own words (2-4 sentences) and cite passages inline like [1], [2]. "
-    "Do not copy passage headings or repeat the context. If the passages do not contain the answer, "
-    "reply exactly: 'I could not find this in your documents.' Do not use outside knowledge."
+    "Write a short answer in your own words (2-4 sentences) and cite passages "
+    "inline like [1], [2]. Do not copy passage headings or repeat the context. "
+    "If the passages do not contain the answer, reply exactly: "
+    "'I could not find this in your documents.' Do not use outside knowledge."
 )
 
 
 def call_llm(prompt: str, system: str = SYSTEM_PROMPT) -> str:
-    """One place to swap LLM providers. Retrieval code never changes."""
-    if LLM_PROVIDER == "anthropic":
-        import anthropic
-        client = anthropic.Anthropic()  # reads ANTHROPIC_API_KEY
-        resp = client.messages.create(
-            model=LLM_MODEL,
-            max_tokens=800,
-            system=system,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return resp.content[0].text
+    """Call the configured LLM provider without changing retrieval."""
 
-    if LLM_PROVIDER == "ollama":
+    provider = str(LLM_PROVIDER or "gemini").strip().lower()
+
+    if provider == "groq":
+        from groq import Groq
+
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            raise ValueError(
+                "GROQ_API_KEY is missing. Add it to your local .env "
+                "or Streamlit Cloud Secrets."
+            )
+
+        groq_model = os.getenv(
+            "GROQ_MODEL", "llama-3.3-70b-versatile"
+        )
+
+        client = Groq(api_key=api_key)
+        response = client.chat.completions.create(
+            model=groq_model,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": prompt},
+            ],
+            max_tokens=800,
+            temperature=0,
+        )
+
+        content = response.choices[0].message.content
+        return content or "I could not generate an answer."
+
+    elif provider == "gemini":
+        from google import genai
+        from google.genai import types
+
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise ValueError(
+                "GEMINI_API_KEY is missing, but LLM_PROVIDER is set to gemini."
+            )
+
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=system,
+                temperature=0,
+            ),
+        )
+
+        return response.text or "I could not generate an answer."
+
+    elif provider == "ollama":
         import requests
-        r = requests.post(
-            f"{OLLAMA_URL}/api/chat",
+
+        response = requests.post(
+            f"{OLLAMA_URL.rstrip('/')}/api/chat",
             json={
                 "model": OLLAMA_MODEL,
                 "stream": False,
@@ -46,76 +99,117 @@ def call_llm(prompt: str, system: str = SYSTEM_PROMPT) -> str:
                     {"role": "system", "content": system},
                     {"role": "user", "content": prompt},
                 ],
+                "options": {"temperature": 0},
             },
             timeout=300,
         )
-        r.raise_for_status()
-        return r.json()["message"]["content"]
+        response.raise_for_status()
+        return response.json()["message"]["content"]
 
-    if LLM_PROVIDER == "groq":
-        from groq import Groq
-        groq_model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
-        client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-        resp = client.chat.completions.create(
-            model=groq_model,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": prompt},
-            ],
+    elif provider == "anthropic":
+        import anthropic
+
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+        if not api_key:
+            raise ValueError("ANTHROPIC_API_KEY is missing.")
+
+        client = anthropic.Anthropic(api_key=api_key)
+        response = client.messages.create(
+            model=LLM_MODEL,
             max_tokens=800,
+            system=system,
+            messages=[{"role": "user", "content": prompt}],
         )
-        return resp.choices[0].message.content
+        return response.content[0].text
 
-    # Default: Gemini
-    from google import genai
-    from google.genai import types
-    client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-    resp = client.models.generate_content(
-        model=GEMINI_MODEL,
-        contents=prompt,
-        config=types.GenerateContentConfig(system_instruction=system),
-    )
-    return resp.text
+    else:
+        raise ValueError(
+            f"Unsupported LLM_PROVIDER: {provider!r}. "
+            "Choose groq, gemini, ollama, or anthropic."
+        )
 
 
 def retrieve(query: str, k: int = TOP_K):
-    """Dense retrieval. Returns list of dicts with text, source, page, score."""
-    q_emb = get_embedder().encode([QUERY_PREFIX + query], normalize_embeddings=True).tolist()
-    res = get_collection().query(query_embeddings=q_emb, n_results=k)
+    """Dense retrieval. Returns text, source, page, and similarity score."""
+
+    query_embedding = get_embedder().encode(
+        [QUERY_PREFIX + query],
+        normalize_embeddings=True,
+    ).tolist()
+
+    results = get_collection().query(
+        query_embeddings=query_embedding,
+        n_results=k,
+    )
+
     hits = []
-    for doc, meta, dist in zip(res["documents"][0], res["metadatas"][0], res["distances"][0]):
-        hits.append({
-            "text": doc,
-            "source": meta.get("source") or meta.get("filename", "Unknown"),
-            "page": meta.get("page", "?"),
-            "score": 1 - dist,  # cosine distance -> similarity
-        })
+
+    if not results.get("documents") or not results["documents"][0]:
+        return hits
+
+    for document, metadata, distance in zip(
+        results["documents"][0],
+        results["metadatas"][0],
+        results["distances"][0],
+    ):
+        metadata = metadata or {}
+
+        hits.append(
+            {
+                "text": document,
+                "source": metadata.get("source")
+                or metadata.get("filename", "Unknown"),
+                "page": metadata.get("page", "?"),
+                "score": 1 - distance,
+            }
+        )
+
     return hits
 
 
 def build_context(hits) -> str:
+    """Format retrieved passages with numbered source references."""
+
     return "\n\n".join(
-        f"[{i}] (source: {h.get('source') or h.get('filename', 'Unknown')}, page {h.get('page', '?')})\n{h['text']}"
-        for i, h in enumerate(hits, start=1)
+        f"[{index}] (source: {hit['source']}, page {hit['page']})\n"
+        f"{hit['text']}"
+        for index, hit in enumerate(hits, start=1)
     )
 
 
 def answer(query: str) -> dict:
+    """Retrieve relevant passages and answer using the configured LLM."""
+
     hits = retrieve(query)
 
-    # Guardrail: if even the best match is weak, don't bother the LLM
     if not hits or hits[0]["score"] < MIN_SIMILARITY:
-        return {"answer": "I could not find this in your documents.", "sources": hits}
+        return {
+            "answer": "I could not find this in your documents.",
+            "sources": hits,
+        }
 
-    prompt = f"Context:\n{build_context(hits)}\n\nQuestion: {query}"
-    return {"answer": call_llm(prompt), "sources": hits}
+    prompt = (
+        f"Context:\n{build_context(hits)}\n\n"
+        f"Question: {query}"
+    )
+
+    return {
+        "answer": call_llm(prompt),
+        "sources": hits,
+    }
 
 
 def show(result: dict):
+    """Print the answer and its retrieved sources."""
+
     print("\n" + result["answer"])
     print("\nSources:")
-    for i, h in enumerate(result["sources"], start=1):
-        print(f"  [{i}] {h['source']} p.{h['page']}  (similarity {h['score']:.2f})")
+
+    for index, hit in enumerate(result["sources"], start=1):
+        print(
+            f"  [{index}] {hit['source']} p.{hit['page']} "
+            f"(similarity {hit['score']:.2f})"
+        )
 
 
 if __name__ == "__main__":
@@ -123,8 +217,14 @@ if __name__ == "__main__":
         show(answer(" ".join(sys.argv[1:])))
     else:
         print("IntelliVault baseline RAG. Type 'exit' to quit.")
+
         while True:
-            q = input("\nAsk: ").strip()
-            if q.lower() in {"exit", "quit", ""}:
+            query = input("\nAsk: ").strip()
+
+            if query.lower() in {"exit", "quit", ""}:
                 break
-            show(answer(q))
+
+            try:
+                show(answer(query))
+            except Exception as error:
+                print(f"\nError: {error}")

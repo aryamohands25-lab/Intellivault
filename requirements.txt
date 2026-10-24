@@ -11,3 +11,4 @@ pytesseract
 pdf2image
 pymongo
 argon2-cffi
+groq
