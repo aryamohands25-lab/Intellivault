@@ -8,3 +8,4 @@ google-genai
 streamlit
 rank-bm25
 pytesseract
+pdf2image
