@@ -123,8 +123,8 @@ Create a local `.env` file using the variable names expected by your application
 
 ```dotenv
 LLM_PROVIDER=groq
-GROQ_API_KEY=your_groq_api_key
-GROQ_MODEL=your_supported_groq_model
+GROQ_API_KEY=gsk_wU9PwLLM_PROVIDER=groqUvGuf3FWNTa5TZyWGdyb3FYsx1Zggq9cBzEDyzNU0dPu0Fb
+GROQ_MODEL=qwen/qwen3.8-27b
 ```
 
 Add MongoDB settings only if required by the features you use. Check `config.py` and `database.py` for the exact variable names.
