@@ -123,7 +123,7 @@ Create a local `.env` file using the variable names expected by your application
 
 ```dotenv
 LLM_PROVIDER=groq
-GROQ_API_KEY=gsk_wU9PwLLM_PROVIDER=groqUvGuf3FWNTa5TZyWGdyb3FYsx1Zggq9cBzEDyzNU0dPu0Fb
+GROQ_API_KEY=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
 GROQ_MODEL=qwen/qwen3.8-27b
 ```
 
