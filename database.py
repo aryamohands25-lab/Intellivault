@@ -7,7 +7,6 @@ import re
 import ssl
 import certifi
 
-from dotenv import dotenv_values
 from pymongo import MongoClient, ASCENDING, DESCENDING
 from pymongo.errors import DuplicateKeyError, ServerSelectionTimeoutError
 from argon2 import PasswordHasher, exceptions as argon2_exceptions

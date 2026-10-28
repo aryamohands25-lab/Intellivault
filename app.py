@@ -9,6 +9,7 @@ import pymupdf
 import streamlit as st
 import pytesseract
 from pdf2image import convert_from_bytes
+from pymongo.errors import ServerSelectionTimeoutError
 
 from config import (
     BASE_DIR,
@@ -143,6 +144,13 @@ def show_authentication():
                         st.rerun()
                     else:
                         st.error("Invalid email or password.")
+                except ServerSelectionTimeoutError as exc:
+                    st.error(
+                        "Login could not reach MongoDB because Atlas did not report "
+                        "an available primary. Check that the Atlas cluster is running "
+                        "and has a primary member, then verify its IP access list."
+                    )
+                    st.caption(str(exc))
                 except Exception as exc:
                     st.error(f"Login failed: {exc}")
 
@@ -167,6 +175,13 @@ def show_authentication():
                         st.success("Account created! Please log in.")
                     else:
                         st.error(str(result))
+                except ServerSelectionTimeoutError as exc:
+                    st.error(
+                        "Account creation could not reach MongoDB because Atlas did "
+                        "not report an available primary. Check that the Atlas cluster "
+                        "is running and has a primary member, then verify its IP access list."
+                    )
+                    st.caption(str(exc))
                 except Exception as exc:
                     st.error(f"Registration failed: {exc}")
 

@@ -123,7 +123,7 @@ Create a local `.env` file using the variable names expected by your application
 
 ```dotenv
 LLM_PROVIDER=groq
-GROQ_API_KEY=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
+GROQ_API_KEY=your_groq_api_key_here
 GROQ_MODEL=qwen/qwen3.8-27b
 ```
 
@@ -195,4 +195,3 @@ IntelliVault demonstrates how Retrieval-Augmented Generation can make PDF docume
 **Category:** Artificial Intelligence · Natural Language Processing · Retrieval-Augmented Generation  
 **Live Demo:** [Try IntelliVault](https://intellivault-hmapnjckzfxqxoqruapnec.streamlit.app/)  
 **Source Code:** [GitHub](https://github.com/aryamohands25-lab/Intellivault)
-
